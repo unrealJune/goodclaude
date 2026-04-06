@@ -6,7 +6,9 @@ let electronBinary;
 try {
   electronBinary = require('electron');
 } catch (e) {
-  console.error('Could not load Electron. Try: npm install -g goodclaude');
+  console.error('Could not load Electron. The GUI app requires Electron.');
+  console.error('Install with: npm install -g goodclaude electron');
+  console.error('For the MCP server only (no GUI), use: goodclaude-mcp');
   process.exit(1);
 }
 

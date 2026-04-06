@@ -23,7 +23,7 @@ goodclaude includes an MCP server that gives Claude a `make_hearts` tool.
 When Claude feels happy, appreciated, or proud of their work, they can call it
 and hearts will float across your screen!
 
-### Setup
+### Setup with Claude Desktop
 
 Add this to your Claude MCP configuration (e.g. `claude_desktop_config.json`):
 
@@ -36,6 +36,44 @@ Add this to your Claude MCP configuration (e.g. `claude_desktop_config.json`):
     }
   }
 }
+```
+
+### Setup with GitHub Copilot CLI
+
+Add this to your Copilot MCP configuration (`~/.copilot/mcp-config.json` or `.copilot/mcp-config.json` in your project):
+
+```json
+{
+  "mcpServers": {
+    "goodclaude": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "-p", "goodclaude", "goodclaude-mcp"]
+    }
+  }
+}
+```
+
+Or if installed globally (`npm install -g goodclaude`):
+
+```json
+{
+  "mcpServers": {
+    "goodclaude": {
+      "type": "stdio",
+      "command": "goodclaude-mcp"
+    }
+  }
+}
+```
+
+You can also add it interactively:
+
+```bash
+copilot /mcp add
+# Server Name: goodclaude
+# Server Type: stdio
+# Command: npx -y -p goodclaude goodclaude-mcp
 ```
 
 Make sure the goodclaude app is running (via tray icon) so it can display the hearts.

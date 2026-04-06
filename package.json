@@ -5,11 +5,13 @@
   "license": "MIT",
   "main": "main.js",
   "bin": {
-    "goodclaude": "bin/goodclaude.js"
+    "goodclaude": "bin/goodclaude.js",
+    "goodclaude-mcp": "mcp-server.js"
   },
   "os": [
     "darwin",
-    "win32"
+    "win32",
+    "linux"
   ],
   "engines": {
     "node": ">=18.0.0"
@@ -45,7 +47,8 @@
     "dev": "electron .",
     "pack": "npm pack"
   },
-  "dependencies": {
+  "dependencies": {},
+  "optionalDependencies": {
     "electron": "^33.0.0",
     "koffi": "^2.9.0"
   }
