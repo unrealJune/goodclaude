@@ -75,6 +75,9 @@ let hearts = [];
 const HEART_EMOJIS = ['❤️', '💕', '💖', '💗', '💝', '🩷', '🧡', '💛'];
 const PET_SOUNDS = ['sounds/A.mp3', 'sounds/B.mp3', 'sounds/C.mp3', 'sounds/D.mp3', 'sounds/E.mp3'];
 
+// Current hand emoji (updated via IPC for skin tone)
+let handEmoji = '🤚';
+
 document.addEventListener('mousemove', e => {
   const prevX = mouseX;
   mouseX = e.clientX;
@@ -242,7 +245,7 @@ function drawHand() {
   ctx.font = `${P.handSize}px serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('🤚', 0, 0);
+  ctx.fillText(handEmoji, 0, 0);
   ctx.restore();
 }
 
@@ -288,6 +291,10 @@ window.bridge.onShowHearts(() => {
   const cy = H / 2 + (Math.random() - 0.5) * 200;
   spawnHearts(cx, cy, P.mcpHeartCount, P.mcpHeartMinSize, P.mcpHeartMaxSize);
   playPetSound();
+});
+
+window.bridge.onSetSkinTone((emoji) => {
+  handEmoji = emoji;
 });
 
 </script>
