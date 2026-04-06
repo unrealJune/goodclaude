@@ -19,7 +19,6 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const readline = require('readline');
 
 const HEART_FILE = path.join(os.tmpdir(), 'goodclaude-hearts');
 
@@ -132,33 +131,43 @@ function handleMakeHearts(id, args) {
   }
 }
 
-// ── stdio transport ─────────────────────────────────────────────────────────
-const rl = readline.createInterface({ input: process.stdin, terminal: false });
+// ── stdio transport (Content-Length framing per MCP/LSP spec) ───────────────
+let inputBuffer = Buffer.alloc(0);
 
-let buffer = '';
+function sendResponse(response) {
+  const body = Buffer.from(response, 'utf8');
+  process.stdout.write(`Content-Length: ${body.length}\r\n\r\n`);
+  process.stdout.write(body);
+}
 
 process.stdin.on('data', (chunk) => {
-  buffer += chunk.toString();
+  inputBuffer = Buffer.concat([inputBuffer, chunk]);
 
-  // Process complete messages (Content-Length header based or newline-delimited)
-  let newlineIdx;
-  while ((newlineIdx = buffer.indexOf('\n')) !== -1) {
-    const line = buffer.slice(0, newlineIdx).trim();
-    buffer = buffer.slice(newlineIdx + 1);
+  while (true) {
+    // Find the header/body separator
+    const separatorIdx = inputBuffer.indexOf('\r\n\r\n');
+    if (separatorIdx === -1) break;
 
-    if (!line) continue;
+    const header = inputBuffer.slice(0, separatorIdx).toString('utf8');
+    const match = header.match(/Content-Length:\s*(\d+)/i);
+    if (!match) break;
 
-    // Skip Content-Length headers
-    if (line.startsWith('Content-Length:')) continue;
+    const contentLength = parseInt(match[1], 10);
+    const bodyStart = separatorIdx + 4;
+
+    if (inputBuffer.length < bodyStart + contentLength) break; // Wait for more data
+
+    const body = inputBuffer.slice(bodyStart, bodyStart + contentLength).toString('utf8');
+    inputBuffer = inputBuffer.slice(bodyStart + contentLength);
 
     try {
-      const msg = JSON.parse(line);
+      const msg = JSON.parse(body);
       const response = handleRequest(msg);
       if (response) {
-        process.stdout.write(response + '\n');
+        sendResponse(response);
       }
     } catch (e) {
-      // Ignore parse errors for non-JSON lines
+      // Ignore malformed messages
     }
   }
 });
