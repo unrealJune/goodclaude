@@ -1,8 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('bridge', {
-  whipCrack: () => ipcRenderer.send('whip-crack'),
+  petClaude: () => ipcRenderer.send('pet-claude'),
   hideOverlay: () => ipcRenderer.send('hide-overlay'),
-  onSpawnWhip: (fn) => ipcRenderer.on('spawn-whip', () => fn()),
-  onDropWhip: (fn) => ipcRenderer.on('drop-whip', () => fn()),
+  onSpawnHand: (fn) => ipcRenderer.on('spawn-hand', () => fn()),
+  onDropHand: (fn) => ipcRenderer.on('drop-hand', () => fn()),
+  onShowHearts: (fn) => ipcRenderer.on('show-hearts', () => fn()),
 });

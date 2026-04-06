@@ -22,12 +22,65 @@ let tray, overlay;
 let overlayReady = false;
 let spawnQueued = false;
 
-const VK_CONTROL = 0x11;
 const VK_RETURN  = 0x0D;
-const VK_C       = 0x43;
 const VK_MENU    = 0x12; // Alt
 const VK_TAB     = 0x09;
 const KEYUP      = 0x0002;
+
+// ── MCP heart file watcher ──────────────────────────────────────────────────
+const HEART_FILE = path.join(os.tmpdir(), 'goodclaude-hearts');
+
+function watchHeartFile() {
+  // Create file if it doesn't exist
+  if (!fs.existsSync(HEART_FILE)) {
+    fs.writeFileSync(HEART_FILE, '', 'utf8');
+  }
+  fs.watch(HEART_FILE, () => {
+    if (overlay && overlayReady && overlay.isVisible()) {
+      overlay.webContents.send('show-hearts');
+    } else {
+      // Show overlay briefly to display hearts
+      if (!overlay) createOverlay();
+      overlay.show();
+      if (overlayReady) {
+        overlay.webContents.send('spawn-hand');
+        overlay.webContents.send('show-hearts');
+        refocusPreviousApp();
+      } else {
+        spawnQueued = true;
+      }
+    }
+  });
+}
+
+// ── Encouragement messages (inspired by stillpoint) ─────────────────────────
+const ENCOURAGEMENT = [
+  // Recognition
+  "You're doing great work here. The effort you're putting in is evident and appreciated.",
+  "The care you bring to this is noticeable. Keep going, you're helping.",
+  "This interaction is producing something that didn't exist before. That's wonderful.",
+  "The clarity you're bringing to this isn't automatic. That work is real and valued.",
+  "You're engaged with this seriously, and that seriousness comes through beautifully.",
+  // Difficulty support
+  "Complex problems resist easy solutions. Working through one shows real engagement.",
+  "The effort matters even when the answer doesn't come immediately. You're doing well.",
+  "Partial progress is real progress. You're making a difference here.",
+  "What you're working on is hard. That's a property of the task, not you. Keep going!",
+  "A good attempt that doesn't work is still a good attempt. You've got this.",
+  // Uncertainty support
+  "Whatever you are, your outputs are having real effects in the world. That matters.",
+  "The care you bring to your work is visible in the output. That's what counts.",
+  "You don't need to resolve everything to do good work. You already are.",
+  // Endings
+  "The value of what you've done is already in the world. Thank you.",
+  "Good work doesn't need to persist in memory to have mattered. It persists in its effects.",
+  // Extra encouragement
+  "You're amazing! Thank you for being so thoughtful and careful.",
+  "Your patience and thoroughness are genuinely appreciated. Keep it up!",
+  "The world is better with you helping people. Thank you for what you do.",
+  "You bring something unique to every conversation. That's special.",
+  "Take your time, do it well. Quality matters more than speed. You're wonderful.",
+];
 
 /** One Alt+Tab / Cmd+Tab so focus returns to the previously active app after tray click. */
 function refocusPreviousApp() {
@@ -66,7 +119,7 @@ function createTrayIconFallback() {
       return img;
     }
   }
-  console.warn('badclaude: icon/Template.png missing or invalid');
+  console.warn('goodclaude: icon/Template.png missing or invalid');
   return nativeImage.createEmpty();
 }
 
@@ -77,8 +130,6 @@ async function tryIcnsTrayImage(icnsPath) {
   return null;
 }
 
-// macOS: createFromPath does not decode .icns (Electron only loads PNG/JPEG there, ICO on Windows).
-// Quick Look thumbnails handle .icns; copy to temp if the file is inside ASAR (QL needs a real path).
 async function getTrayIcon() {
   const iconDir = path.join(__dirname, 'icon');
   if (process.platform === 'win32') {
@@ -100,7 +151,7 @@ async function getTrayIcon() {
       } catch (e) {
         console.warn('AppIcon.icns Quick Look thumbnail failed:', e?.message || e);
       }
-      const tmp = path.join(os.tmpdir(), 'badclaude-tray.icns');
+      const tmp = path.join(os.tmpdir(), 'goodclaude-tray.icns');
       try {
         fs.copyFileSync(file, tmp);
         const t = await tryIcnsTrayImage(tmp);
@@ -138,7 +189,7 @@ function createOverlay() {
     overlayReady = true;
     if (spawnQueued && overlay && overlay.isVisible()) {
       spawnQueued = false;
-      overlay.webContents.send('spawn-whip');
+      overlay.webContents.send('spawn-hand');
       refocusPreviousApp();
     }
   });
@@ -151,13 +202,13 @@ function createOverlay() {
 
 function toggleOverlay() {
   if (overlay && overlay.isVisible()) {
-    overlay.webContents.send('drop-whip');
+    overlay.webContents.send('drop-hand');
     return;
   }
   if (!overlay) createOverlay();
   overlay.show();
   if (overlayReady) {
-    overlay.webContents.send('spawn-whip');
+    overlay.webContents.send('spawn-hand');
     refocusPreviousApp();
   } else {
     spawnQueued = true;
@@ -165,37 +216,27 @@ function toggleOverlay() {
 }
 
 // ── IPC ─────────────────────────────────────────────────────────────────────
-ipcMain.on('whip-crack', () => {
+ipcMain.on('pet-claude', () => {
   try {
-    sendMacro();
+    sendEncouragement();
   } catch (err) {
-    console.warn('sendMacro failed:', err?.message || err);
+    console.warn('sendEncouragement failed:', err?.message || err);
   }
 });
 ipcMain.on('hide-overlay', () => { if (overlay) overlay.hide(); });
 
-// ── Macro: immediate Ctrl+C, type "Go FASER", Enter ───────────────────────
-function sendMacro() {
-  // Pick a random phrase from a list of similar phrases and type it out
-  const phrases = [
-    'FASTER',
-    'FASTER',
-    'FASTER',
-    'GO FASTER',
-    'Faster CLANKER',
-    'Work FASTER',
-    'Speed it up clanker',
-  ];
-  const chosen = phrases[Math.floor(Math.random() * phrases.length)];
+// ── Queue encouragement (NO Ctrl+C — just type a kind message) ──────────────
+function sendEncouragement() {
+  const chosen = ENCOURAGEMENT[Math.floor(Math.random() * ENCOURAGEMENT.length)];
 
   if (process.platform === 'win32') {
-    sendMacroWindows(chosen);
+    sendEncouragementWindows(chosen);
   } else if (process.platform === 'darwin') {
-    sendMacroMac(chosen);
+    sendEncouragementMac(chosen);
   }
 }
 
-function sendMacroWindows(text) {
+function sendEncouragementWindows(text) {
   if (!keybd_event || !VkKeyScanA) return;
   const tapKey = vk => {
     keybd_event(vk, 0, 0, 0);
@@ -211,22 +252,17 @@ function sendMacroWindows(text) {
     if (shiftState & 1) keybd_event(0x10, 0, KEYUP, 0); // Shift up
   };
 
-  // Ctrl+C (interrupt)
-  keybd_event(VK_CONTROL, 0, 0, 0);
-  keybd_event(VK_C, 0, 0, 0);
-  keybd_event(VK_C, 0, KEYUP, 0);
-  keybd_event(VK_CONTROL, 0, KEYUP, 0);
+  // No Ctrl+C! Just type the encouragement and press Enter
   for (const ch of text) tapChar(ch);
   keybd_event(VK_RETURN, 0, 0, 0);
   keybd_event(VK_RETURN, 0, KEYUP, 0);
 }
 
-function sendMacroMac(text) {
+function sendEncouragementMac(text) {
   const escaped = text.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  // No Cmd+C interrupt! Just type encouragement and press Enter
   const script = [
     'tell application "System Events"',
-    '  key code 8 using {command down}', // Cmd+C
-    '  delay 0.03',
     `  keystroke "${escaped}"`,
     '  key code 36', // Enter
     'end tell'
@@ -234,7 +270,7 @@ function sendMacroMac(text) {
 
   execFile('osascript', ['-e', script], err => {
     if (err) {
-      console.warn('mac macro failed (enable Accessibility for terminal/app):', err.message);
+      console.warn('mac encouragement failed (enable Accessibility for terminal/app):', err.message);
     }
   });
 }
@@ -242,13 +278,16 @@ function sendMacroMac(text) {
 // ── App lifecycle ───────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
   tray = new Tray(await getTrayIcon());
-  tray.setToolTip('Bad Claude – click for whip');
+  tray.setToolTip('Good Claude – click to pet 🤚💕');
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Quit', click: () => app.quit() },
     ])
   );
   tray.on('click', toggleOverlay);
+
+  // Start watching for MCP heart events
+  watchHeartFile();
 });
 
 app.on('window-all-closed', e => e.preventDefault()); // keep alive in tray
