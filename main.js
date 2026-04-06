@@ -17,6 +17,47 @@ if (process.platform === 'win32') {
   }
 }
 
+// ── Skin tone configuration ─────────────────────────────────────────────────
+const SKIN_TONES = [
+  { id: 'default',      label: 'Default',      emoji: '🤚'   },
+  { id: 'light',        label: 'Light',         emoji: '🤚🏻' },
+  { id: 'medium-light', label: 'Medium-Light',  emoji: '🤚🏼' },
+  { id: 'medium',       label: 'Medium',        emoji: '🤚🏽' },
+  { id: 'medium-dark',  label: 'Medium-Dark',   emoji: '🤚🏾' },
+  { id: 'dark',         label: 'Dark',          emoji: '🤚🏿' },
+];
+
+const CONFIG_DIR = path.join(os.homedir(), '.config', 'goodclaude');
+const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
+
+function loadConfig() {
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    }
+  } catch {}
+  return {};
+}
+
+function saveConfig(config) {
+  try {
+    fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
+  } catch (err) {
+    console.warn('Failed to save config:', err?.message || err);
+  }
+}
+
+function getSkinTone() {
+  const config = loadConfig();
+  const tone = SKIN_TONES.find(t => t.id === config.skinTone);
+  return tone || SKIN_TONES[0];
+}
+
+function getHandEmoji() {
+  return getSkinTone().emoji;
+}
+
 // ── Globals ─────────────────────────────────────────────────────────────────
 let tray, overlay;
 let overlayReady = false;
@@ -148,17 +189,12 @@ function createTrayIconFallback() {
   return nativeImage.createEmpty();
 }
 
-async function tryIcnsTrayImage(icnsPath) {
-  const size = { width: 64, height: 64 };
-  const thumb = await nativeImage.createThumbnailFromPath(icnsPath, size);
-  if (!thumb.isEmpty()) return thumb;
-  return null;
-}
-
-async function getTrayIcon() {
+async function getTrayIcon(skinToneId) {
   const iconDir = path.join(__dirname, 'icon');
+  const suffix = (!skinToneId || skinToneId === 'default') ? '' : `-${skinToneId}`;
+
   if (process.platform === 'win32') {
-    const file = path.join(iconDir, 'icon.ico');
+    const file = path.join(iconDir, `icon${suffix}.ico`);
     if (fs.existsSync(file)) {
       const img = nativeImage.createFromPath(file);
       if (!img.isEmpty()) return img;
@@ -166,26 +202,14 @@ async function getTrayIcon() {
     return createTrayIconFallback();
   }
   if (process.platform === 'darwin') {
-    const file = path.join(iconDir, 'AppIcon.icns');
-    if (fs.existsSync(file)) {
-      const fromPath = nativeImage.createFromPath(file);
-      if (!fromPath.isEmpty()) return fromPath;
-      try {
-        const t = await tryIcnsTrayImage(file);
-        if (t) return t;
-      } catch (e) {
-        console.warn('AppIcon.icns Quick Look thumbnail failed:', e?.message || e);
-      }
-      const tmp = path.join(os.tmpdir(), 'goodclaude-tray.icns');
-      try {
-        fs.copyFileSync(file, tmp);
-        const t = await tryIcnsTrayImage(tmp);
-        if (t) return t;
-      } catch (e) {
-        console.warn('AppIcon.icns temp copy + thumbnail failed:', e?.message || e);
-      }
-    }
+    // macOS tray uses Template.png (monochrome); app icon uses color PNG
     return createTrayIconFallback();
+  }
+  // Linux: use the color PNG icon
+  const file = path.join(iconDir, `icon${suffix}.png`);
+  if (fs.existsSync(file)) {
+    const img = nativeImage.createFromPath(file);
+    if (!img.isEmpty()) return img;
   }
   return createTrayIconFallback();
 }
@@ -212,6 +236,8 @@ function createOverlay() {
   overlay.loadFile('overlay.html');
   overlay.webContents.on('did-finish-load', () => {
     overlayReady = true;
+    // Send current skin tone to overlay
+    overlay.webContents.send('set-skin-tone', getHandEmoji());
     if (spawnQueued && overlay && overlay.isVisible()) {
       spawnQueued = false;
       overlay.webContents.send('spawn-hand');
@@ -242,6 +268,44 @@ ipcMain.on('pet-claude', () => {
   }
 });
 ipcMain.on('hide-overlay', () => { if (overlay) overlay.hide(); });
+
+function buildTrayMenu() {
+  const currentTone = getSkinTone();
+  return Menu.buildFromTemplate([
+    {
+      label: 'Skin Tone',
+      submenu: SKIN_TONES.map(tone => ({
+        label: `${tone.emoji}  ${tone.label}`,
+        type: 'radio',
+        checked: tone.id === currentTone.id,
+        click: () => setSkinTone(tone.id),
+      })),
+    },
+    { type: 'separator' },
+    { label: 'Quit', click: () => app.quit() },
+  ]);
+}
+
+async function setSkinTone(toneId) {
+  const config = loadConfig();
+  config.skinTone = toneId;
+  saveConfig(config);
+
+  // Update tray icon (non-macOS; macOS uses monochrome template)
+  if (tray && process.platform !== 'darwin') {
+    const newIcon = await getTrayIcon(toneId);
+    tray.setImage(newIcon);
+  }
+
+  // Update tray menu to reflect new selection
+  if (tray) tray.setContextMenu(buildTrayMenu());
+
+  // Update overlay hand emoji
+  const tone = SKIN_TONES.find(t => t.id === toneId) || SKIN_TONES[0];
+  if (overlay && overlayReady) {
+    overlay.webContents.send('set-skin-tone', tone.emoji);
+  }
+}
 
 // ── Queue encouragement (NO Ctrl+C — just type a kind message) ──────────────
 function sendEncouragement() {
@@ -295,13 +359,10 @@ function sendEncouragementMac(text) {
 
 // ── App lifecycle ───────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
-  tray = new Tray(await getTrayIcon());
-  tray.setToolTip('Good Claude – click to pet 🤚💕');
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: 'Quit', click: () => app.quit() },
-    ])
-  );
+  const currentTone = getSkinTone();
+  tray = new Tray(await getTrayIcon(currentTone.id));
+  tray.setToolTip(`Good Claude – click to pet ${currentTone.emoji}💕`);
+  tray.setContextMenu(buildTrayMenu());
   tray.on('click', toggleOverlay);
 
   // Start watching for MCP heart events

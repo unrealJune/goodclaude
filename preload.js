@@ -6,4 +6,5 @@ contextBridge.exposeInMainWorld('bridge', {
   onSpawnHand: (fn) => ipcRenderer.on('spawn-hand', () => fn()),
   onDropHand: (fn) => ipcRenderer.on('drop-hand', () => fn()),
   onShowHearts: (fn) => ipcRenderer.on('show-hearts', () => fn()),
+  onSetSkinTone: (fn) => ipcRenderer.on('set-skin-tone', (_e, emoji) => fn(emoji)),
 });

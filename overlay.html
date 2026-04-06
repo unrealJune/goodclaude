@@ -45,12 +45,6 @@ const P = {
   // Visuals
   bgAlpha:        0.011,  // barely-visible bg so window captures mouse events
 
-  // Arm rendering
-  armSegments:    12,     // number of segments in the arm
-  armLength:      200,    // total arm length in px
-  armWidth:       14,     // arm stroke width
-  armColor:       '#f5d0a9', // skin tone
-  armOutline:     '#d4a574', // slightly darker outline
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -80,6 +74,9 @@ let lastMoveDir = 0; // -1 left, 1 right
 let hearts = [];
 const HEART_EMOJIS = ['❤️', '💕', '💖', '💗', '💝', '🩷', '🧡', '💛'];
 const PET_SOUNDS = ['sounds/A.mp3', 'sounds/B.mp3', 'sounds/C.mp3', 'sounds/D.mp3', 'sounds/E.mp3'];
+
+// Current hand emoji (updated via IPC for skin tone)
+let handEmoji = '🤚';
 
 document.addEventListener('mousemove', e => {
   const prevX = mouseX;
@@ -232,44 +229,13 @@ function draw() {
   ctx.fillStyle = `rgba(0,0,0,${P.bgAlpha})`;
   ctx.fillRect(0, 0, W, H);
 
-  // Draw arm (a gentle curved line from edge of screen to hand)
+  // Draw floating hand
   if (handActive) {
-    drawArm();
     drawHand();
   }
 
   // Draw hearts
   drawHearts();
-}
-
-function drawArm() {
-  // Arm extends from bottom-right corner toward the hand
-  const startX = W + 30;
-  const startY = H + 30;
-  const endX = handX + 15;
-  const endY = handY + 25;
-
-  // Control points for a natural arm curve
-  const midX = (startX + endX) / 2 + 40;
-  const midY = (startY + endY) / 2 + 20;
-
-  // Outline
-  ctx.beginPath();
-  ctx.moveTo(startX, startY);
-  ctx.quadraticCurveTo(midX, midY, endX, endY);
-  ctx.strokeStyle = P.armOutline;
-  ctx.lineWidth = P.armWidth + 4;
-  ctx.lineCap = 'round';
-  ctx.stroke();
-
-  // Arm fill
-  ctx.beginPath();
-  ctx.moveTo(startX, startY);
-  ctx.quadraticCurveTo(midX, midY, endX, endY);
-  ctx.strokeStyle = P.armColor;
-  ctx.lineWidth = P.armWidth;
-  ctx.lineCap = 'round';
-  ctx.stroke();
 }
 
 function drawHand() {
@@ -279,7 +245,7 @@ function drawHand() {
   ctx.font = `${P.handSize}px serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('🤚', 0, 0);
+  ctx.fillText(handEmoji, 0, 0);
   ctx.restore();
 }
 
@@ -325,6 +291,10 @@ window.bridge.onShowHearts(() => {
   const cy = H / 2 + (Math.random() - 0.5) * 200;
   spawnHearts(cx, cy, P.mcpHeartCount, P.mcpHeartMinSize, P.mcpHeartMaxSize);
   playPetSound();
+});
+
+window.bridge.onSetSkinTone((emoji) => {
+  handEmoji = emoji;
 });
 
 </script>
