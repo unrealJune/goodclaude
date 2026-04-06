@@ -35,7 +35,9 @@ function loadConfig() {
     if (fs.existsSync(CONFIG_FILE)) {
       return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
     }
-  } catch {}
+  } catch (err) {
+    console.warn('Failed to load config:', err?.message || err);
+  }
   return {};
 }
 
@@ -287,13 +289,15 @@ function buildTrayMenu() {
 }
 
 async function setSkinTone(toneId) {
+  const tone = SKIN_TONES.find(t => t.id === toneId) || SKIN_TONES[0];
+
   const config = loadConfig();
-  config.skinTone = toneId;
+  config.skinTone = tone.id;
   saveConfig(config);
 
   // Update tray icon (non-macOS; macOS uses monochrome template)
   if (tray && process.platform !== 'darwin') {
-    const newIcon = await getTrayIcon(toneId);
+    const newIcon = await getTrayIcon(tone.id);
     tray.setImage(newIcon);
   }
 
@@ -301,7 +305,6 @@ async function setSkinTone(toneId) {
   if (tray) tray.setContextMenu(buildTrayMenu());
 
   // Update overlay hand emoji
-  const tone = SKIN_TONES.find(t => t.id === toneId) || SKIN_TONES[0];
   if (overlay && overlayReady) {
     overlay.webContents.send('set-skin-tone', tone.emoji);
   }
