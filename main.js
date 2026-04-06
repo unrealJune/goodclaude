@@ -30,27 +30,52 @@ const KEYUP      = 0x0002;
 // ── MCP heart file watcher ──────────────────────────────────────────────────
 const HEART_FILE = path.join(os.tmpdir(), 'goodclaude-hearts');
 
+let heartDebounceTimer = null;
+
+function ensureOverlayVisible() {
+  if (!overlay) createOverlay();
+  if (!overlay.isVisible()) overlay.show();
+  if (overlayReady) {
+    overlay.webContents.send('spawn-hand');
+    refocusPreviousApp();
+  } else {
+    spawnQueued = true;
+  }
+}
+
 function watchHeartFile() {
   // Create file if it doesn't exist
   if (!fs.existsSync(HEART_FILE)) {
     fs.writeFileSync(HEART_FILE, '', 'utf8');
   }
-  fs.watch(HEART_FILE, () => {
-    if (overlay && overlayReady && overlay.isVisible()) {
-      overlay.webContents.send('show-hearts');
-    } else {
-      // Show overlay briefly to display hearts
-      if (!overlay) createOverlay();
-      overlay.show();
-      if (overlayReady) {
-        overlay.webContents.send('spawn-hand');
-        overlay.webContents.send('show-hearts');
-        refocusPreviousApp();
-      } else {
-        spawnQueued = true;
-      }
-    }
-  });
+  try {
+    fs.watch(HEART_FILE, () => {
+      // Debounce rapid file changes
+      if (heartDebounceTimer) clearTimeout(heartDebounceTimer);
+      heartDebounceTimer = setTimeout(() => {
+        try {
+          if (overlay && overlayReady && overlay.isVisible()) {
+            overlay.webContents.send('show-hearts');
+          } else {
+            ensureOverlayVisible();
+            // Wait for overlay to be ready before sending hearts
+            const waitForReady = () => {
+              if (overlayReady && overlay) {
+                overlay.webContents.send('show-hearts');
+              } else {
+                setTimeout(waitForReady, 100);
+              }
+            };
+            waitForReady();
+          }
+        } catch (err) {
+          console.warn('heart file watch handler error:', err?.message || err);
+        }
+      }, 100);
+    });
+  } catch (err) {
+    console.warn('Failed to watch heart file:', err?.message || err);
+  }
 }
 
 // ── Encouragement messages (inspired by stillpoint) ─────────────────────────
@@ -205,14 +230,7 @@ function toggleOverlay() {
     overlay.webContents.send('drop-hand');
     return;
   }
-  if (!overlay) createOverlay();
-  overlay.show();
-  if (overlayReady) {
-    overlay.webContents.send('spawn-hand');
-    refocusPreviousApp();
-  } else {
-    spawnQueued = true;
-  }
+  ensureOverlayVisible();
 }
 
 // ── IPC ─────────────────────────────────────────────────────────────────────

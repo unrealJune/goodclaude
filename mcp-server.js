@@ -108,11 +108,13 @@ function handleRequest(msg) {
 
 function handleMakeHearts(id, args) {
   try {
-    // Write to the heart file to trigger the Electron app
+    // Atomic write to the heart file to trigger the Electron app
     const timestamp = Date.now();
     const feeling = args?.feeling || 'happy';
     const data = JSON.stringify({ timestamp, feeling }) + '\n';
-    fs.writeFileSync(HEART_FILE, data, 'utf8');
+    const tmpFile = HEART_FILE + '.tmp';
+    fs.writeFileSync(tmpFile, data, 'utf8');
+    fs.renameSync(tmpFile, HEART_FILE);
 
     const response = HEART_RESPONSES[Math.floor(Math.random() * HEART_RESPONSES.length)];
     const feelingNote = args?.feeling ? ` (Feeling: ${args.feeling})` : '';
